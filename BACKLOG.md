@@ -1,0 +1,2 @@
+- APOD: intermittent 500/503/timeouts on NASA's side (Oct 5). Retry later; add retry/backoff in Phase 5.
+- DONKI flares: response fails JSON parsing. Inspect the raw response body later.
