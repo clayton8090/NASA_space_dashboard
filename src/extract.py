@@ -9,7 +9,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = "https://api.nasa.gov"
+NASA_URL = "https://api.nasa.gov"
+APOD_URL = "https://science.nasa.gov/wp-json/wp/v2/apod-basic"
+DONKI_URL = "https://ccmc.gsfc.nasa.gov/DONKI-API/get"
 RAW_DIR = Path("data/raw")
 LOOKBACK_DAYS = 6  # NeoWs allows at most a 7-day window
 
@@ -25,23 +27,30 @@ def get_api_key():
 
 
 def _get(path, params=None):
-    """Shared request helper: auth header, timeout, error check, quota logging."""
+    """Keyed request to api.nasa.gov (NeoWs). The key goes in a header, not the URL."""
     response = requests.get(
-        f"{BASE_URL}{path}",
+        f"{NASA_URL}{path}",
         params=params,
         headers={"X-Api-Key": get_api_key()},
         timeout=30,
     )
     response.raise_for_status()
     print(f"{path} -> requests remaining:", response.headers.get("X-RateLimit-Remaining"))
-    if not response.content.strip():
-        return None  # some endpoints (DONKI) send an empty body when there is no data
+    return response.json()
+
+
+def _get_public(url, params=None):
+    """Keyless request. Never sends our NASA key to other hosts."""
+    response = requests.get(url, params=params, timeout=30)
+    response.raise_for_status()
+    print(f"{url} -> ok")
     return response.json()
 
 
 def fetch_apod():
-    """Today's Astronomy Picture of the Day."""
-    return _get("/planetary/apod")
+    """Newest Astronomy Picture of the Day, from NASA Science's new endpoint."""
+    data = _get_public(APOD_URL, {"per_page": 1})
+    return data[0] if isinstance(data, list) and data else data
 
 
 def fetch_neo_feed(start_date, end_date):
@@ -53,12 +62,11 @@ def fetch_neo_feed(start_date, end_date):
 
 
 def fetch_donki_flares(start_date, end_date):
-    """Solar flare events between two dates."""
-    data = _get(
-        "/DONKI/FLR",
+    """Solar flare events between two dates, from CCMC's DONKI API."""
+    return _get_public(
+        f"{DONKI_URL}/FLR",
         {"startDate": start_date.isoformat(), "endDate": end_date.isoformat()},
     )
-    return data or []  # empty response means no flares in this window
 
 
 def save_raw(name, data):
@@ -82,7 +90,7 @@ def fetch_all():
     for name, fetch in sources.items():
         try:
             data = fetch()
-        except requests.exceptions.RequestException as exc:
+        except (requests.exceptions.RequestException, ValueError) as exc:
             failures[name] = str(exc)
             print(f"{name}: FAILED ({exc})")
             continue
@@ -95,7 +103,7 @@ if __name__ == "__main__":
     results, failures = fetch_all()
     print()
     if "apod" in results:
-        print("APOD title:    ", results["apod"].get("title"))
+        print("APOD fields:   ", sorted(results["apod"].keys()))
     if "neo" in results:
         print("Asteroids:     ", results["neo"].get("element_count"))
     if "donki_flares" in results:

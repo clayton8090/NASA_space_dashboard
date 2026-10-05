@@ -1,2 +1,4 @@
-- APOD: intermittent 500/503/timeouts on NASA's side (Oct 5). Retry later; add retry/backoff in Phase 5.
-- DONKI flares: response fails JSON parsing. Inspect the raw response body later.
+- Add retry/backoff for 5xx and 429 errors (Phase 5).
+- Detect non-JSON responses and raise a clear error.
+- Re-check terms of use and rate limits for the new APOD and DONKI endpoints.
+- Confirm NeoWs is unaffected before the legacy api.nasa.gov APOD archive date (Dec 1, 2026).
