@@ -46,3 +46,18 @@ def test_latest_apod_returns_dict_with_credit(seeded_conn):
 
 def test_latest_apod_on_empty_database_is_none():
     assert latest_apod(connect(":memory:")) is None
+
+
+def test_closer_than_filter(seeded_conn):
+    df = load_asteroids(seeded_conn, "2026-10-01", "2026-10-31", max_lunar=2.6)
+    assert list(df["asteroid_id"]) == ["1", "3"]
+
+
+def test_minimum_size_uses_the_average_of_min_and_max(seeded_conn):
+    df = load_asteroids(seeded_conn, "2026-10-01", "2026-10-31", min_size_m=70)
+    assert sorted(df["asteroid_id"]) == ["2", "3"]  # averages: 15 m, 150 m, 70 m
+
+
+def test_filters_combine(seeded_conn):
+    df = load_asteroids(seeded_conn, "2026-10-01", "2026-10-31", hazardous_only=True, min_size_m=70)
+    assert list(df["asteroid_id"]) == ["3"]

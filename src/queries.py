@@ -26,12 +26,24 @@ def date_bounds(conn):
     return date.fromisoformat(low), date.fromisoformat(high)
 
 
-def load_asteroids(conn, start, end, hazardous_only=False):
+def load_asteroids(conn, start, end, hazardous_only=False, max_lunar=None, min_size_m=None):
+    """Asteroid approaches in a date range, optionally only hazardous, closer than a distance, or above a size.
+
+    max_lunar: keep passes at or closer than this many Moon distances.
+    min_size_m: keep asteroids whose estimated size (average of NASA's min and max) is at least this many meters.
+    """
     sql = "SELECT * FROM asteroid_approaches WHERE approach_date BETWEEN ? AND ?"
+    params = [_iso(start), _iso(end)]
     if hazardous_only:
         sql += " AND is_hazardous = 1"
+    if max_lunar is not None:
+        sql += " AND miss_distance_lunar <= ?"
+        params.append(max_lunar)
+    if min_size_m is not None:
+        sql += " AND (diameter_min_m + diameter_max_m) / 2.0 >= ?"
+        params.append(min_size_m)
     sql += " ORDER BY approach_date, miss_distance_km"
-    df = pd.read_sql_query(sql, conn, params=[_iso(start), _iso(end)])
+    df = pd.read_sql_query(sql, conn, params=params)
     df["is_hazardous"] = df["is_hazardous"].fillna(0).astype(bool)
     return df
 

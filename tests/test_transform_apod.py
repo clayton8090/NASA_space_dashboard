@@ -41,3 +41,14 @@ def test_empty_response_gives_empty_table():
         df = transform_apod(bad)
         assert df.empty
         assert list(df.columns) == APOD_COLUMNS
+
+
+def test_promo_lines_at_the_end_of_the_explanation_are_removed():
+    promo = "Your Sky Surprise: What picture did APOD feature on your birthday? (post 1995)Tomorrow's picture: pixels in space"
+    sample = dict(SAMPLE, explanation="<strong>Explanation: </strong>Real text here." + promo)
+    assert transform_apod(sample).loc[0, "explanation"] == "Real text here."
+
+
+def test_tomorrows_picture_line_alone_is_removed_even_with_no_space_before_it():
+    sample = dict(SAMPLE, explanation="<strong>Explanation: </strong>Nearly 6 full moons.Tomorrow\u2019s picture: pixels in space")
+    assert transform_apod(sample).loc[0, "explanation"] == "Nearly 6 full moons."

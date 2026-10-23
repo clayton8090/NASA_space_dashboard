@@ -3,7 +3,12 @@ name: Daily data update
 on:
   schedule:
     - cron: "15 6 * * *"   # every day at 06:15 UTC
-  workflow_dispatch: {}    # also lets you run it by hand from the Actions tab
+  workflow_dispatch:       # also lets you run it by hand from the Actions tab
+    inputs:
+      backfill_days:
+        description: "Also load this many past days (0 = none, max 365)"
+        required: false
+        default: "0"
 
 permissions:
   contents: write          # needed so the job can commit the updated database
@@ -28,6 +33,14 @@ jobs:
 
       - name: Run tests first
         run: python -m pytest -q
+
+      - name: Backfill history (manual runs only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.backfill_days != '0' && inputs.backfill_days != '' }}
+        env:
+          NASA_API_KEY: ${{ secrets.NASA_API_KEY }}
+          SPACE_DB_PATH: data/space.db
+          BACKFILL_DAYS: ${{ inputs.backfill_days }}   # passed as an env var, never pasted into the command
+        run: python -m src.backfill --days "$BACKFILL_DAYS"
 
       - name: Fetch, clean and load data
         env:

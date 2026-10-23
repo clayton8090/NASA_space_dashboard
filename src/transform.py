@@ -150,6 +150,8 @@ def transform_apod(raw):
     explanation = clean_html(raw.get("explanation"))
     if explanation:
         explanation = re.sub(r"^Explanation:\s*", "", explanation)
+        # APOD appends promo lines ("Your Sky Surprise...", "Tomorrow's picture...") to the text.
+        explanation = re.split(r"Your Sky Surprise:|Tomorrow.s picture:", explanation)[0].strip() or None
     row = {
         "apod_date": raw.get("date"),
         "title": clean_html(raw.get("title")),
