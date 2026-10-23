@@ -109,3 +109,43 @@ def test_dashboard_tells_you_when_no_database_exists(tmp_path, monkeypatch):
     at = run_app(tmp_path / "missing.db", monkeypatch)
     assert not at.exception
     assert any("No database found" in w.value for w in at.warning)
+
+
+def test_description_and_status_line(seeded_db_path, monkeypatch):
+    at = run_app(seeded_db_path, monkeypatch)
+    text = page_text(at)
+    assert "Every day, this dashboard collects fresh data from NASA" in text
+    assert "Logged through Oct 5, 2026 · 3 asteroid passes · 3 solar flares" in text
+
+
+def test_picture_is_framed_as_a_plate_with_credit(seeded_db_path, monkeypatch):
+    at = run_app(seeded_db_path, monkeypatch)
+    text = page_text(at)
+    assert "Plate · Oct 5, 2026" in text
+    assert '<a href="https://example.com/u/test">Test Photographer</a>' in text
+
+
+def test_closest_pass_ruler_follows_the_filters(seeded_db_path, monkeypatch):
+    at = run_app(seeded_db_path, monkeypatch)
+    assert "2022 CC · Oct 5 · 0.8 Moon distances" in page_text(at)
+    at.sidebar.select_slider[1].set_value("140 m (hazard-size)").run()
+    assert "2021 BB · Oct 3 · 13.0 Moon distances" in page_text(at)
+
+
+def test_outside_credit_text_and_links_are_made_safe(tmp_path, monkeypatch):
+    from src.load import connect, load_all
+    from src.transform import transform_apod
+    db = tmp_path / "evil.db"
+    conn = connect(db)
+    load_all(conn, apod=transform_apod({
+        "date": "2026-10-05", "title": "T", "media_type": "image",
+        "copyright": '<a href="javascript:alert(1)">&lt;b&gt;Bad&lt;/b&gt;</a>',
+    }))
+    conn.execute("INSERT INTO asteroid_approaches (asteroid_id, approach_date, miss_distance_lunar, is_hazardous) "
+                 "VALUES ('1', '2026-10-05', 1.0, 0)")
+    conn.commit(); conn.close()
+    at = run_app(db, monkeypatch)
+    assert not at.exception
+    text = page_text(at)
+    assert "javascript:" not in text
+    assert "<b>Bad</b>" not in text and "&lt;b&gt;Bad&lt;/b&gt;" in text

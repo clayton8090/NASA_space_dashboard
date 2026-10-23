@@ -69,3 +69,9 @@ def flare_summary(df):
     else:
         text += " None reached M or X class, the levels that can cause radio blackouts."
     return text
+
+
+def safe_url(url):
+    """Only allow plain web links from outside data (blocks things like 'javascript:' links)."""
+    url = str(url or "").strip()
+    return url if url.lower().startswith(("https://", "http://")) else None

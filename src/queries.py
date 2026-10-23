@@ -66,3 +66,10 @@ def latest_apod(conn):
     if df.empty:
         return None
     return {k: (None if pd.isna(v) else v) for k, v in df.iloc[0].to_dict().items()}
+
+
+def totals(conn):
+    """Everything collected so far, regardless of filters: (asteroid passes, solar flares)."""
+    asteroids = conn.execute("SELECT COUNT(*) FROM asteroid_approaches").fetchone()[0]
+    flares = conn.execute("SELECT COUNT(*) FROM solar_flares").fetchone()[0]
+    return asteroids, flares

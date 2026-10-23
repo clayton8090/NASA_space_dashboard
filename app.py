@@ -1,15 +1,22 @@
 """Phase 4: Streamlit dashboard. Reads only from the database, never from NASA directly."""
+import html
 from datetime import timedelta
 
 import altair as alt
 import pandas as pd
 import streamlit as st
 
-from src.insights import FLARE_STRENGTH, asteroid_summary, display_name, flare_summary, fmt_date
+from src.insights import FLARE_STRENGTH, asteroid_summary, display_name, flare_summary, fmt_date, safe_url
 from src.load import connect_readonly, read_db_path
-from src.queries import FLARE_ORDER, date_bounds, latest_apod, load_asteroids, load_flares
+from src.queries import FLARE_ORDER, date_bounds, latest_apod, load_asteroids, load_flares, totals
+from src.ruler import closest_pass_svg
 
 TITLE = "Clayton's Astronomical Dashboard"
+DESCRIPTION = (
+    "Every day, this dashboard collects fresh data from NASA: the Astronomy Picture of the Day, "
+    "the asteroids that passed near Earth, and the flares erupting from the Sun. "
+    "Choose a time range on the left to explore what happened."
+)
 ASTEROID_COLOR = "#1D9E75"
 FLARE_COLOR = "#D85A30"
 
@@ -45,10 +52,24 @@ MIN_SIZE = {"Any size": None, "10 m": 10, "50 m": 50, "140 m (hazard-size)": 140
 DEFAULTS = {"preset": "7 days", "hazardous_only": False, "closer_than": "Any distance", "min_size": "Any size"}
 HAZARD_LABELS = {True: "Potentially hazardous", False: "Not flagged"}
 
-# Bigger, color-coded tabs. If Streamlit ever changes how tabs are built, these rules simply stop
-# matching and the tabs fall back to the default style; nothing else depends on them.
-TAB_STYLE = f"""
+# Look and feel: an observatory-logbook style. Serif headings, monospaced "instrument" numbers,
+# and color-coded tabs. If Streamlit ever changes how its page is built, these rules simply stop
+# matching and the page falls back to the default look; nothing else depends on them.
+PAGE_STYLE = f"""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,500;1,6..72,400&display=swap');
+h1, h2, h3 {{ font-family: 'Newsreader', Georgia, 'Times New Roman', serif !important; letter-spacing: -0.01em; }}
+.lede {{ font-size: 1.12rem; line-height: 1.6; max-width: 46rem; opacity: 0.85; margin: 0.25rem 0 0.75rem; }}
+.logline, .plate-label {{ font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.8rem; opacity: 0.65; }}
+.logline {{ border-top: 1px solid rgba(128,128,128,0.35); border-bottom: 1px solid rgba(128,128,128,0.35);
+           padding: 0.4rem 0; margin: 0 0 1.25rem; }}
+.plate-label {{ margin: 0; }}
+.credit {{ font-family: 'Newsreader', Georgia, serif; font-style: italic; opacity: 0.8; margin: 0 0 0.5rem; }}
+[data-testid="stMetric"] {{ border-top: 3px solid {ASTEROID_COLOR}; padding: 0.5rem 0.75rem 0.25rem;
+                           background: rgba(128,128,128,0.08); }}
+[data-testid="stColumn"]:nth-child(4) [data-testid="stMetric"],
+[data-testid="column"]:nth-child(4) [data-testid="stMetric"] {{ border-top-color: {FLARE_COLOR}; }}
+[data-testid="stMetricValue"] {{ font-family: 'IBM Plex Mono', ui-monospace, monospace !important; }}
 .stTabs [data-baseweb="tab-list"] {{ gap: 12px; }}
 .stTabs [data-baseweb="tab-list"] button {{
     flex: 1; padding: 14px 8px; border-radius: 8px; border: 2px solid currentColor;
@@ -71,10 +92,10 @@ def color_rule(color):
     st.markdown(f'<div style="border-top: 3px solid {color}; margin: 0 0 0.75rem;"></div>', unsafe_allow_html=True)
 
 
-st.set_page_config(page_title=TITLE, layout="wide")
-st.markdown(TAB_STYLE, unsafe_allow_html=True)
+st.set_page_config(page_title=TITLE, page_icon="🛰️", layout="wide")
+st.markdown(PAGE_STYLE, unsafe_allow_html=True)
 st.title(TITLE)
-st.caption("A daily look at NASA's picture of the day, asteroids passing Earth, and solar flares.")
+st.markdown(f'<p class="lede">{DESCRIPTION}</p>', unsafe_allow_html=True)
 
 conn = connect_readonly(read_db_path())
 if conn is None:
@@ -85,6 +106,13 @@ low, high = date_bounds(conn)
 if low is None:
     st.info("The database is empty. Run `make run` to fetch data.")
     st.stop()
+
+total_asteroids, total_flares = totals(conn)
+st.markdown(
+    f'<p class="logline">Logged through {fmt_date(high)} · {total_asteroids:,} asteroid passes · '
+    f'{total_flares:,} solar flares · updated daily at 06:15 UTC</p>',
+    unsafe_allow_html=True,
+)
 
 
 # ---------- filters (remembered between clicks, with a reset button) ----------
@@ -132,30 +160,33 @@ asteroids = load_asteroids(
 )
 flares = load_flares(conn, start, end)
 
-# ---------- picture of the day: the first thing visitors see ----------
+# ---------- picture of the day: the first thing visitors see, framed like an observatory plate ----------
 apod = latest_apod(conn)
-st.caption("Astronomy Picture of the Day")
 if not apod:
     st.info("No picture of the day has been collected yet.")
 else:
-    left, right = st.columns([3, 2])
-    with left:
-        if apod.get("media_type") == "image" and apod.get("image_url"):
-            st.image(apod["image_url"])
-        elif apod.get("page_url"):
-            st.markdown(f"Today's feature isn't a still image. [View it on NASA's site]({apod['page_url']})")
-    with right:
-        st.subheader(apod.get("title") or "Untitled")
-        details = [fmt_date(apod["apod_date"])] if apod.get("apod_date") else []
-        if apod.get("credit"):
-            credit_url = apod.get("credit_url")
-            details.append(f"Credit: [{apod['credit']}]({credit_url})" if credit_url else f"Credit: {apod['credit']}")
-        if details:
-            st.caption(" · ".join(details))
-        if apod.get("explanation"):
-            st.write(apod["explanation"])
-        if apod.get("page_url"):
-            st.markdown(f"[View on NASA's site]({apod['page_url']})")
+    with st.container(border=True):
+        left, right = st.columns([3, 2])
+        with left:
+            if apod.get("media_type") == "image" and safe_url(apod.get("image_url")):
+                st.image(apod["image_url"])
+            elif safe_url(apod.get("page_url")):
+                st.markdown(f"Today's feature isn't a still image. [View it on NASA's site]({apod['page_url']})")
+        with right:
+            if apod.get("apod_date"):
+                st.markdown(f'<p class="plate-label">Plate · {fmt_date(apod["apod_date"])}</p>', unsafe_allow_html=True)
+            st.subheader(apod.get("title") or "Untitled")
+            if apod.get("credit"):
+                # Credit text and link come from outside data, so they are escaped before going into HTML.
+                name = html.escape(apod["credit"])
+                link = safe_url(apod.get("credit_url"))
+                credit = f'<a href="{html.escape(link, quote=True)}">{name}</a>' if link else name
+                st.markdown(f'<p class="credit">Credit: {credit}</p>', unsafe_allow_html=True)
+            if apod.get("explanation"):
+                st.write(apod["explanation"])
+            if safe_url(apod.get("page_url")):
+                st.markdown(f"[View on NASA's site]({apod['page_url']})")
+    st.caption("Astronomy Picture of the Day, chosen and explained by professional astronomers.")
 
 # ---------- guide, always visible ----------
 with st.container(border=True):
@@ -183,6 +214,19 @@ m3.metric(
     help=HELP["closest"],
 )
 m4.metric("Solar flares", len(flares), help=HELP["flares"])
+
+if not asteroids.empty:
+    closest = asteroids.loc[asteroids["miss_distance_lunar"].idxmin()]
+    st.caption("Closest pass in this range")
+    st.markdown(
+        closest_pass_svg(
+            display_name(closest["name"]),
+            fmt_date(closest["approach_date"], with_year=False),
+            float(closest["miss_distance_lunar"]),
+            hazardous=bool(closest["is_hazardous"]),
+        ),
+        unsafe_allow_html=True,
+    )
 
 tab_asteroids, tab_flares = st.tabs(["Asteroids", "Solar flares"])
 

@@ -61,3 +61,8 @@ def test_minimum_size_uses_the_average_of_min_and_max(seeded_conn):
 def test_filters_combine(seeded_conn):
     df = load_asteroids(seeded_conn, "2026-10-01", "2026-10-31", hazardous_only=True, min_size_m=70)
     assert list(df["asteroid_id"]) == ["3"]
+
+
+def test_totals_count_everything_regardless_of_filters(seeded_conn):
+    from src.queries import totals
+    assert totals(seeded_conn) == (3, 3)

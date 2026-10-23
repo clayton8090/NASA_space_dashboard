@@ -70,3 +70,12 @@ def test_flare_summary_without_big_flares():
 
 def test_flare_summary_when_nothing_matches():
     assert flare_summary(flares()).startswith("No solar flares")
+
+
+def test_safe_url_allows_web_links_only():
+    from src.insights import safe_url
+    assert safe_url("https://apod.nasa.gov/x") == "https://apod.nasa.gov/x"
+    assert safe_url("http://example.com") == "http://example.com"
+    assert safe_url("javascript:alert(1)") is None
+    assert safe_url("") is None
+    assert safe_url(None) is None
