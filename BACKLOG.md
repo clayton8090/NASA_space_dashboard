@@ -1,4 +1,4 @@
-- Add retry/backoff for 5xx and 429 errors (Phase 5).
-- Detect non-JSON responses and raise a clear error.
-- Re-check terms of use and rate limits for the new APOD and DONKI endpoints.
-- Confirm NeoWs is unaffected before the legacy api.nasa.gov APOD archive date (Dec 1, 2026).
+- Re-check terms of use for the new APOD (science.nasa.gov) endpoint before publishing; DONKI asks for CCMC credit (done in the dashboard footer).
+- Confirm NeoWs stays available on api.nasa.gov after the legacy APOD archive date (Dec 1, 2026).
+- Check whether GitHub pauses the scheduled workflow after a quiet period, and re-enable it if so.
+- Ideas for later: Postgres, Docker, more DONKI event types (CMEs, storms), deployment.
